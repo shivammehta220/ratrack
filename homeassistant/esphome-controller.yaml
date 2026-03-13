@@ -1,0 +1,112 @@
+
+# ─────────────────────────── I²C  &  AHT10 ───────────────────────────
+i2c:
+  sda: GPIO4
+  scl: GPIO5
+  scan: true
+  id: bus_a
+
+# ───────── Fan curve logic ─────────
+script:
+  - id: apply_fan_curve
+    mode: restart
+    then:
+      - lambda: |-
+          const float t = id(room_temp).state;
+
+          if (t < 15.0f) {
+            id(pwm_fan_front).turn_on().set_speed(15).perform();
+            id(pwm_fan_rear).turn_on().set_speed(30).perform();
+
+          } else if (t >= 15.0f && t < 25.0f) {
+            id(pwm_fan_front).turn_on().set_speed(20).perform();
+            id(pwm_fan_rear).turn_on().set_speed(40).perform();
+
+          } else if (t >= 25.0f && t < 30.0f) {
+            id(pwm_fan_front).turn_on().set_speed(25).perform();
+            id(pwm_fan_rear).turn_on().set_speed(60).perform();
+
+          } else if (t >= 30.0f && t < 35.0f) {
+            id(pwm_fan_front).turn_on().set_speed(30).perform();
+            id(pwm_fan_rear).turn_on().set_speed(70).perform();
+
+          } else { // t >= 35.0
+            id(pwm_fan_front).turn_on().set_speed(30).perform();
+            id(pwm_fan_rear).turn_on().set_speed(80).perform();
+          }
+
+
+# ─────────────── Sensors: AHT10 + two fan tachometers ───────────────
+sensor:
+  # AHT10 Temperature & Humidity (I²C on bus_a)
+  - platform: aht10
+    i2c_id: bus_a
+    variant: AHT10
+    temperature:
+      name: "${friendly_name} Temperature"
+      id: room_temp
+      on_value:
+        then:
+          - script.execute: apply_fan_curve
+    humidity:
+      name: "${friendly_name} Humidity"
+      id: room_humidity
+    update_interval: 60s
+
+  # Rear fan tachometer (GPIO12 → TACH, 2 pulses / rev → ×0.5)
+  - platform: pulse_counter
+    pin:
+      number: GPIO12
+      mode: INPUT_PULLUP
+    name: "${friendly_name} Rear Fan RPM"
+    id: fan_rear_rpm
+    unit_of_measurement: "RPM"
+    filters:
+      - multiply: 0.5
+    count_mode:
+      rising_edge: INCREMENT
+      falling_edge: DISABLE
+    update_interval: 3s
+
+  # Front fan tachometer (GPIO15 → TACH)
+  - platform: pulse_counter
+    pin:
+      number: GPIO15
+      mode: INPUT_PULLUP
+    name: "${friendly_name} Front Fan RPM"
+    id: fan_front_rpm
+    unit_of_measurement: "RPM"
+    filters:
+      - multiply: 0.5
+    count_mode:
+      rising_edge: INCREMENT
+      falling_edge: DISABLE
+    update_interval: 3s
+
+# ───────── PWM outputs ─────────
+output:
+  - platform: esp8266_pwm
+    id: fanhub_pwm_rear
+    pin: GPIO14
+    frequency: ${fan_pwm_freq}
+
+  - platform: esp8266_pwm
+    id: fanhub_pwm_front
+    pin: GPIO13
+    frequency: ${fan_pwm_freq}
+
+# ───────── Fan entities (1% resolution) ─────────
+fan:
+  - platform: speed
+    id: pwm_fan_rear
+    name: "${friendly_name} Rear PWM Fan"
+    output: fanhub_pwm_rear
+    speed_count: 100
+    restore_mode: NO_RESTORE
+
+  - platform: speed
+    id: pwm_fan_front
+    name: "${friendly_name} Front PWM Fan"
+    output: fanhub_pwm_front
+    speed_count: 100
+    restore_mode: NO_RESTORE

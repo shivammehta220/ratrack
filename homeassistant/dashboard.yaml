@@ -1,0 +1,683 @@
+button_card_templates:
+  tailscale_summary:
+    show_icon: true
+    show_name: true
+    show_label: true
+    show_state: false
+    icon: mdi:vpn
+    name: Tailscale Devices
+    label: |
+      [[[
+        // Online threshold (minutes)
+        const THRESH_MIN = 10;
+        const THRESH_MS = THRESH_MIN * 60 * 1000;
+
+        // Find all tailscale last_seen sensors (pattern you have: sensor.<base>_last_seen)
+        const lastSeenEntities = Object.keys(states)
+          .filter(eid => /^sensor\..+_last_seen$/.test(eid));
+
+        const now = Date.now();
+        let total = 0, online = 0, offline = 0, unknown = 0;
+
+        for (const eid of lastSeenEntities) {
+          const st = states[eid]?.state;
+          total++;
+
+          // Handle unknown/unavailable
+          if (!st || st === 'unknown' || st === 'unavailable') {
+            unknown++;
+            continue;
+          }
+
+          const t = Date.parse(st);
+          if (isNaN(t)) {
+            unknown++;
+            continue;
+          }
+
+          const isOnline = (now - t) <= THRESH_MS;
+          if (isOnline) online++;
+          else offline++;
+        }
+
+        return `Total: ${total} • Online: ${online} • Offline: ${offline}` +
+               (unknown ? ` • Unknown: ${unknown}` : ``) +
+               `\nOnline threshold: last seen ≤ ${THRESH_MIN} min`;
+      ]]]
+    styles:
+      card:
+        - padding: 16px
+        - border-radius: 16px
+      grid:
+        - grid-template-areas: '"i n" "i l"'
+        - grid-template-columns: 42px 1fr
+        - grid-template-rows: min-content min-content
+        - column-gap: 12px
+      icon:
+        - width: 28px
+      name:
+        - font-size: 18px
+        - font-weight: 700
+      label:
+        - font-size: 13px
+        - white-space: pre-line
+        - line-height: 1.25
+        - opacity: 0.9
+  tailscale_device:
+    show_icon: true
+    show_name: true
+    show_label: true
+    show_state: false
+    tap_action:
+      action: more-info
+    hold_action:
+      action: more-info
+    icon: mdi:laptop
+    label: |
+      [[[
+        // Online threshold (minutes)
+        const THRESH_MIN = 10;
+        const THRESH_MS = THRESH_MIN * 60 * 1000;
+
+        // base from sensor.<base>_last_seen
+        const base = entity.entity_id
+          .replace('sensor.', '')
+          .replace(/_last_seen$/, '');
+
+        const lastSeen = states[`sensor.${base}_last_seen`]?.state ?? '—';
+        const ip       = states[`sensor.${base}_ip_address`]?.state ?? '—';
+        const expires  = states[`sensor.${base}_expires`]?.state ?? '—';
+        const keyDis   = states[`binary_sensor.${base}_key_expiry_disabled`]?.state ?? 'unknown';
+
+        // Update available (your "client" entity)
+        const upd      = states[`binary_sensor.${base}_client`]?.state ?? 'unknown';
+
+        // Online/offline derived from last_seen age
+        let onlineTxt = 'Unknown';
+        let isOnline = null;
+
+        if (lastSeen && lastSeen !== 'unknown' && lastSeen !== 'unavailable') {
+          const t = Date.parse(lastSeen);
+          if (!isNaN(t)) {
+            isOnline = (Date.now() - t) <= THRESH_MS;
+            onlineTxt = isOnline ? 'Online' : 'Offline';
+          }
+        }
+
+        const keyTxt =
+          (keyDis === 'on') ? 'Key expiry: disabled' :
+          (keyDis === 'off') ? 'Key expiry: enabled' :
+          'Key expiry: —';
+
+        const updTxt =
+          (upd === 'on') ? 'Update: available' :
+          (upd === 'off') ? 'Update: none' :
+          'Update: —';
+
+        return `${onlineTxt} • Last: ${lastSeen}\nIP: ${ip} • Expires: ${expires}\n${keyTxt} • ${updTxt}`;
+      ]]]
+    styles:
+      card:
+        - padding: 14px
+        - border-radius: 16px
+      grid:
+        - grid-template-areas: '"i n" "i l"'
+        - grid-template-columns: 42px 1fr
+        - grid-template-rows: min-content min-content
+        - column-gap: 12px
+      icon:
+        - width: 28px
+      name:
+        - font-size: 16px
+        - font-weight: 600
+        - align-self: center
+      label:
+        - font-size: 13px
+        - line-height: 1.25
+        - white-space: pre-line
+        - opacity: 0.9
+    state: null
+views:
+  - title: server
+    type: sections
+    max_columns: 4
+    sections:
+      - type: grid
+        cards:
+          - type: custom:pi-hole
+            device_id: YOUR_PIHOLE_DEVICE_ID
+      - type: grid
+        cards:
+          - type: custom:tabbed-card
+            tabs:
+              - attributes:
+                  label: Details
+                  icon: fas:circle-info
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: custom:mushroom-title-card
+                      title: GL.iNet MT6000 — Status
+                      alignment: center
+                      card_mod:
+                        style: |
+                          ha-card { border-radius: 18px; padding-bottom: 2px; }
+                    - type: custom:mushroom-chips-card
+                      alignment: center
+                      chips:
+                        - type: entity
+                          entity: sensor.gl_inet_mt6000_uptime
+                          icon: fas:clock
+                          name: Uptime
+                        - type: entity
+                          entity: sensor.gl_inet_mt6000_load_avg_1m
+                          icon: fas:gauge
+                          name: 1m Load
+                        - type: entity
+                          entity: sensor.gl_inet_mt6000_cpu_temperature
+                          icon: fas:temperature-three-quarters
+                          name: CPU °C
+                      card_mod:
+                        style: |
+                          ha-card { border-radius: 18px; }
+                    - type: horizontal-stack
+                      cards:
+                        - type: custom:mushroom-entity-card
+                          entity: sensor.gl_inet_mt6000_memory_usage
+                          name: Memory Usage
+                          icon: fas:memory
+                          layout: vertical
+                          primary_info: name
+                          secondary_info: state
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+                        - type: custom:mushroom-entity-card
+                          entity: sensor.gl_inet_mt6000_flash_usage
+                          name: Flash Usage
+                          icon: fas:sd-card
+                          layout: vertical
+                          primary_info: name
+                          secondary_info: state
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+                    - type: horizontal-stack
+                      cards:
+                        - type: custom:mushroom-entity-card
+                          entity: sensor.gl_inet_mt6000_load_avg_5m
+                          name: Load (5m)
+                          icon: fas:gauge-high
+                          layout: vertical
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+                        - type: custom:mushroom-entity-card
+                          entity: sensor.gl_inet_mt6000_load_avg_15m
+                          name: Load (15m)
+                          icon: fas:gauge-simple-high
+                          layout: vertical
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+              - attributes:
+                  label: VPN
+                  icon: fas:shield-halved
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: custom:mushroom-title-card
+                      title: WireGuard — VPN Profiles
+                      alignment: center
+                      card_mod:
+                        style: |
+                          ha-card { border-radius: 18px; padding-bottom: 2px; }
+                    - type: grid
+                      columns: 2
+                      square: false
+                      cards:
+                        - type: custom:mushroom-entity-card
+                          entity: >-
+                            switch.gl_inet_mt6000_wg_client_vpn_profile_1
+                          name: VPN Profile 1
+                          icon: fas:key
+                          layout: horizontal
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          card_mod:
+                            style: 'ha-card { border-radius: 18px; }'
+                        - type: custom:mushroom-entity-card
+                          entity: >-
+                            switch.gl_inet_mt6000_wg_client_vpn_profile_2
+                          name: VPN Profile 2
+                          icon: fas:key
+                          layout: horizontal
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          card_mod:
+                            style: 'ha-card { border-radius: 18px; }'
+                        - type: custom:mushroom-entity-card
+                          entity: >-
+                            switch.gl_inet_mt6000_wg_client_vpn_profile_3
+                          name: VPN Profile 3
+                          icon: fas:key
+                          layout: horizontal
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          card_mod:
+                            style: 'ha-card { border-radius: 18px; }'
+                        - type: custom:mushroom-entity-card
+                          entity: >-
+                            switch.gl_inet_mt6000_wg_client_vpn_profile_4
+                          name: VPN Profile 4
+                          icon: fas:key
+                          layout: horizontal
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          card_mod:
+                            style: 'ha-card { border-radius: 18px; }'
+                        - type: custom:mushroom-entity-card
+                          entity: >-
+                            switch.gl_inet_mt6000_wg_client_vpn_profile_5
+                          name: VPN Profile 5
+                          icon: fas:key
+                          layout: horizontal
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          card_mod:
+                            style: 'ha-card { border-radius: 18px; }'
+                        - type: custom:mushroom-entity-card
+                          entity: >-
+                            switch.gl_inet_mt6000_wg_client_vpn_profile_6
+                          name: VPN Profile 6
+                          icon: fas:key
+                          layout: horizontal
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          card_mod:
+                            style: 'ha-card { border-radius: 18px; }'
+              - attributes:
+                  label: Controls
+                  icon: fas:sliders
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: custom:mushroom-title-card
+                      title: Router Controls
+                      alignment: center
+                      card_mod:
+                        style: |
+                          ha-card { border-radius: 18px; padding-bottom: 2px; }
+                    - type: grid
+                      columns: 3
+                      square: false
+                      cards:
+                        - type: custom:mushroom-entity-card
+                          entity: switch.gl_inet_mt6000_tailscale
+                          name: Tailscale
+                          icon: fas:route
+                          layout: vertical
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+                        - type: custom:mushroom-entity-card
+                          entity: switch.gl_inet_mt6000_my_wifi_5g
+                          name: SSID <YOUR_5G_SSID>
+                          icon: fas:wifi
+                          layout: vertical
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+                        - type: custom:mushroom-entity-card
+                          entity: switch.gl_inet_mt6000_my_wifi_iot
+                          name: SSID <YOUR_IOT_SSID>
+                          icon: fas:wifi
+                          layout: vertical
+                          tap_action:
+                            action: toggle
+                          hold_action: none
+                          fill_container: true
+                          card_mod:
+                            style: |
+                              ha-card { border-radius: 18px; }
+          - type: custom:tabbed-card
+            tabs:
+              - attributes:
+                  label: Overview
+                  icon: fas:server
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: custom:mushroom-chips-card
+                      chips:
+                        - type: template
+                          entity: sensor.minirack_box_minirack_box_temperature
+                          icon: mdi:thermometer
+                          content: >-
+                            {{
+                            states('sensor.minirack_box_minirack_box_temperature')
+                            }}°C
+                          icon_color: >-
+                            {% set t =
+                            states('sensor.minirack_box_minirack_box_temperature')|float(0)
+                            %} {% if t < 20 %}blue{% elif t < 26 %}green{% elif
+                            t < 30 %}amber{% else %}red{% endif %}
+                        - type: template
+                          entity: sensor.minirack_box_minirack_box_humidity
+                          icon: mdi:water-percent
+                          content: >-
+                            {{
+                            states('sensor.minirack_box_minirack_box_humidity')
+                            }}%
+                          icon_color: >-
+                            {% set h =
+                            states('sensor.minirack_box_minirack_box_humidity')|float(0)
+                            %} {% if h < 30 %}blue{% elif h < 60 %}green{% elif
+                            h < 70 %}amber{% else %}red{% endif %}
+                        - type: template
+                          icon: mdi:fan-auto
+                          content: >-
+                            {% set t =
+                            states('sensor.minirack_box_minirack_box_temperature')|float(-999)
+                            %} {% if t == -999 %}
+                              Auto • —
+                            {% elif t < 15 %}
+                              Auto • <15 (15/30)
+                            {% elif t < 25 %}
+                              Auto • 15–25 (20/40)
+                            {% elif t < 30 %}
+                              Auto • 25–30 (25/60)
+                            {% elif t < 35 %}
+                              Auto • 30–35 (30/70)
+                            {% else %}
+                              Auto • 35+ (30/80)
+                            {% endif %}
+                          icon_color: >-
+                            {% set t =
+                            states('sensor.minirack_box_minirack_box_temperature')|float(0)
+                            %} {% if t < 25 %}green{% elif t < 35 %}amber{% else
+                            %}red{% endif %}
+                    - type: custom:layout-card
+                      layout_type: grid
+                      layout:
+                        grid-template-columns: repeat(2, 1fr)
+                        grid-gap: 12px
+                      cards:
+                        - type: custom:button-card
+                          entity: fan.minirack_box_minirack_box_front_pwm_fan
+                          name: Front Fan (Intake)
+                          icon: fas:fan
+                          variables:
+                            rpm_entity: sensor.minirack_box_minirack_box_front_fan_rpm
+                            temp_entity: sensor.minirack_box_minirack_box_temperature
+                          show_state: true
+                          show_label: true
+                          show_icon: true
+                          label: |-
+                            [[[
+                              const rpm = states[variables.rpm_entity]?.state;
+                              const t = states[variables.temp_entity]?.state;
+                              const rpmTxt = (rpm && rpm !== 'unknown') ? `${rpm} RPM` : 'RPM —';
+                              const tTxt = (t && t !== 'unknown') ? `${t}°C` : 'Temp —';
+                              return `${rpmTxt} • ${tTxt}`;
+                            ]]]
+                          custom_fields:
+                            pct: |-
+                              [[[
+                                const p = entity?.attributes?.percentage ?? 0;
+                                return `${p}%`;
+                              ]]]
+                          styles:
+                            card:
+                              - border-radius: 16px
+                              - padding: 12px
+                            name:
+                              - justify-self: start
+                              - font-weight: 600
+                            state:
+                              - justify-self: start
+                              - opacity: 0.8
+                            label:
+                              - justify-self: start
+                              - font-size: 12px
+                              - opacity: 0.9
+                            icon:
+                              - animation: |-
+                                  [[[
+                                    const on = entity.state === 'on';
+                                    return on ? 'rotation 2s linear infinite' : 'none';
+                                  ]]]
+                            custom_fields:
+                              pct:
+                                - position: absolute
+                                - right: 12px
+                                - top: 12px
+                                - font-weight: 700
+                          tap_action:
+                            action: toggle
+                          hold_action:
+                            action: more-info
+                          double_tap_action:
+                            action: call-service
+                            service: fan.set_percentage
+                            data:
+                              percentage: 100
+                            target:
+                              entity_id: fan.minirack_box_minirack_box_front_pwm_fan
+                          state:
+                            - value: 'on'
+                              styles:
+                                card:
+                                  - background: rgba(0, 150, 136, 0.15)
+                            - value: 'off'
+                              styles:
+                                card:
+                                  - background: var(--card-background-color)
+                          card_mod:
+                            style: |
+                              @keyframes rotation {
+                                from { transform: rotate(0); }
+                                to { transform: rotate(360deg); }
+                              }
+                        - type: custom:button-card
+                          entity: fan.minirack_box_minirack_box_rear_pwm_fan
+                          name: Rear Fan (Exhaust)
+                          icon: fas:fan
+                          variables:
+                            rpm_entity: sensor.minirack_box_minirack_box_rear_fan_rpm
+                            temp_entity: sensor.minirack_box_minirack_box_temperature
+                          show_state: true
+                          show_label: true
+                          show_icon: true
+                          label: |-
+                            [[[
+                              const rpm = states[variables.rpm_entity]?.state;
+                              const t = states[variables.temp_entity]?.state;
+                              const rpmTxt = (rpm && rpm !== 'unknown') ? `${rpm} RPM` : 'RPM —';
+                              const tTxt = (t && t !== 'unknown') ? `${t}°C` : 'Temp —';
+                              return `${rpmTxt} • ${tTxt}`;
+                            ]]]
+                          custom_fields:
+                            pct: |-
+                              [[[
+                                const p = entity?.attributes?.percentage ?? 0;
+                                return `${p}%`;
+                              ]]]
+                          styles:
+                            card:
+                              - border-radius: 16px
+                              - padding: 12px
+                            name:
+                              - justify-self: start
+                              - font-weight: 600
+                            state:
+                              - justify-self: start
+                              - opacity: 0.8
+                            label:
+                              - justify-self: start
+                              - font-size: 12px
+                              - opacity: 0.9
+                            icon:
+                              - animation: |-
+                                  [[[
+                                    const on = entity.state === 'on';
+                                    return on ? 'rotation 2s linear infinite' : 'none';
+                                  ]]]
+                            custom_fields:
+                              pct:
+                                - position: absolute
+                                - right: 12px
+                                - top: 12px
+                                - font-weight: 700
+                          tap_action:
+                            action: toggle
+                          hold_action:
+                            action: more-info
+                          double_tap_action:
+                            action: call-service
+                            service: fan.set_percentage
+                            data:
+                              percentage: 100
+                            target:
+                              entity_id: fan.minirack_box_minirack_box_rear_pwm_fan
+                          state:
+                            - value: 'on'
+                              styles:
+                                card:
+                                  - background: rgba(0, 150, 136, 0.15)
+                            - value: 'off'
+                              styles:
+                                card:
+                                  - background: var(--card-background-color)
+                          card_mod:
+                            style: |
+                              @keyframes rotation {
+                                from { transform: rotate(0); }
+                                to { transform: rotate(360deg); }
+                              }
+              - attributes:
+                  label: Details
+                  icon: fas:gauge
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: custom:mushroom-chips-card
+                      chips:
+                        - type: template
+                          icon: mdi:information-outline
+                          content: >-
+                            Manual fan % changes will be overwritten by ESPHome
+                            on next temp update
+                          icon_color: amber
+                    - type: horizontal-stack
+                      cards:
+                        - type: custom:mushroom-fan-card
+                          entity: fan.minirack_box_minirack_box_front_pwm_fan
+                          name: Front Fan
+                          show_percentage_control: true
+                          collapsible_controls: true
+                          icon_animation: true
+                          secondary_info: state
+                        - type: custom:mushroom-fan-card
+                          entity: fan.minirack_box_minirack_box_rear_pwm_fan
+                          name: Rear Fan
+                          show_percentage_control: true
+                          collapsible_controls: true
+                          icon_animation: true
+                          secondary_info: state
+                    - type: history-graph
+                      hours_to_show: 24
+                      entities:
+                        - entity: sensor.minirack_box_minirack_box_temperature
+                          name: Temp (°C)
+                        - entity: sensor.minirack_box_minirack_box_humidity
+                          name: Humidity (%)
+                    - type: history-graph
+                      hours_to_show: 6
+                      entities:
+                        - entity: sensor.minirack_box_minirack_box_front_fan_rpm
+                          name: Front RPM
+                        - entity: sensor.minirack_box_minirack_box_rear_fan_rpm
+                          name: Rear RPM
+      - type: grid
+        cards:
+          - type: vertical-stack
+            cards:
+              - type: custom:button-card
+                template: tailscale_summary
+              - type: custom:auto-entities
+                card:
+                  type: custom:layout-card
+                  layout_type: custom:grid-layout
+                  layout:
+                    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))
+                    grid-gap: 12px
+                card_param: cards
+                filter:
+                  include:
+                    - domain: sensor
+                      entity_id: '*_last_seen'
+                      integration: tailscale
+                      options:
+                        type: custom:button-card
+                        template: tailscale_device
+                        name: |
+                          [[[
+                            return entity.attributes.friendly_name
+                              ? entity.attributes.friendly_name.replace(' Last seen','')
+                              : entity.entity_id;
+                          ]]]
+                        card_mod:
+                          style: |
+                            [[[
+                              const THRESH_MIN = 10;
+                              const THRESH_MS = THRESH_MIN * 60 * 1000;
+
+                              const base = entity.entity_id
+                                .replace('sensor.', '')
+                                .replace(/_last_seen$/, '');
+
+                              const lastSeen = states[`sensor.${base}_last_seen`]?.state;
+                              let isOnline = null;
+
+                              if (lastSeen && lastSeen !== 'unknown' && lastSeen !== 'unavailable') {
+                                const t = Date.parse(lastSeen);
+                                if (!isNaN(t)) isOnline = (Date.now() - t) <= THRESH_MS;
+                              }
+
+                              if (isOnline === true) {
+                                return `
+                                  ha-card { border: 1px solid rgba(0, 255, 0, 0.25) !important; }
+                                  :host { --paper-item-icon-color: var(--success-color); }
+                                `;
+                              } else if (isOnline === false) {
+                                return `
+                                  ha-card { border: 1px solid rgba(255, 0, 0, 0.25) !important; }
+                                  :host { --paper-item-icon-color: var(--error-color); }
+                                `;
+                              } else {
+                                return `
+                                  ha-card { border: 1px solid rgba(128, 128, 128, 0.25) !important; }
+                                `;
+                              }
+                            ]]]
+                sort:
+                  method: name

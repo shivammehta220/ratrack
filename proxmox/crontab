@@ -1,0 +1,10 @@
+# SnapRAID cron jobs for Ratrack NAS
+# Install via: crontab -e  (as root)
+#
+# Offset these from Proxmox backup jobs to avoid I/O contention.
+
+# Nightly sync — protects new and changed files
+30 3 * * * /usr/sbin/snapraid sync >/var/log/snapraid-sync.log 2>&1
+
+# Weekly scrub (Sunday) — detects silent bitrot on 12% of data older than 7 days
+30 4 * * 0 /usr/sbin/snapraid scrub -p 12 -o 7 >/var/log/snapraid-scrub.log 2>&1

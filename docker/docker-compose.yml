@@ -1,0 +1,50 @@
+services:
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce
+    environment:
+      - TZ=${TZ:-UTC}
+    networks:
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /data/portainer:/data
+    ports:
+      - "9443:9443"
+    restart: unless-stopped
+
+  homer:
+    container_name: homer
+    image: b4bz/homer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /data/homer:/www/assets
+    ports:
+      - "8080:8080"
+    user: "1000:1000"
+    environment:
+      - INIT_ASSETS=1
+    restart: unless-stopped
+    networks:
+      - internal
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    environment:
+      - NODE_ENV=production
+      - N8N_SECURE_COOKIE=false
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+networks:
+  internal:
+    name: internal
+    driver: bridge
+
+volumes:
+  n8n_data:
+    name: n8n_data

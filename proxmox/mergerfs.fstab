@@ -1,0 +1,22 @@
+# MergerFS + SnapRAID fstab entries for Ratrack NAS
+# Append these lines to /etc/fstab on the Proxmox host.
+#
+# Disk layout:
+#   nvme0n1  — OS (Proxmox VE, DO NOT TOUCH)
+#   nvme1n1  — NVMe data (projects, 500 GB)
+#   sda      — SATA SSD data (archive, 1 TB)
+#   sdb      — SATA SSD parity (SnapRAID, 1 TB)
+#
+# Replace <NVME_DATA_SERIAL>, <SSD_DATA_SERIAL>, <SSD_PARITY_SERIAL>
+# with actual /dev/disk/by-id values from your system.
+# Run: ls -l /dev/disk/by-id/ | grep -v part
+
+# === Data disks ===
+/dev/disk/by-id/<NVME_DATA_SERIAL>-part1        /srv/projects  ext4  noatime,nodiratime  0  2
+/dev/disk/by-id/<SSD_DATA_SERIAL>-part1          /srv/archive1  ext4  noatime,nodiratime  0  2
+
+# === SnapRAID parity filesystem (holds the parity file, NOT in the pool) ===
+/dev/disk/by-id/<SSD_PARITY_SERIAL>-part1        /srv/parity1   ext4  noatime,nodiratime  0  2
+
+# === MergerFS pool (data disks only — never include parity) ===
+/srv/projects:/srv/archive1  /mnt/storage  fuse.mergerfs  defaults,allow_other,use_ino,func.getattr=newest,category.create=mfs,minfreespace=50G,x-systemd.requires=/srv/projects,x-systemd.requires=/srv/archive1,x-systemd.after=/srv/projects,x-systemd.after=/srv/archive1  0  0

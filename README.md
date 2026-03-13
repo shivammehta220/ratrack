@@ -1,6 +1,6 @@
-# Ratrack
+# ratrack
 
-A self-hosted mini-rack homelab built around the 10-inch rack standard. It houses a router, PoE switch, Home Assistant, Pi-hole, Docker host, Proxmox NAS, and IP KVMs — all on a desk.
+A self-hosted mini-rack homelab built around the 10-inch rack standard. It houses a router, PoE switch, Home Assistant, Pi-hole, Docker host, Proxmox NAS, and IP KVMs, all on a desk.
 
 Inspired by Jeff Geerling's [mini-rack](https://github.com/geerlingguy/mini-rack) project.
 
